@@ -231,9 +231,11 @@ function createNewSector(x, y, shapeField) {
     newSector.handleDragOver = function () {
         isDragOK = true
 
-        this.makeDragGood()
+        
         if (this.state) {
             isDragOK = false
+        } else {
+            this.makeDragGood()
         }
 
         currentShape = draggedSector.shapeType
