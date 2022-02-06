@@ -13,6 +13,7 @@ let shapeSectors = {}
  * Contains arrays of functions that must be called with (sector, callback).
  */
 let draggedSector = null
+let isDragOK = false
 let allShapes = [
     ['3-3'], ['2-2', 'r'], ['3-3', 'u'], ['3-2', 'ur'], ['3-3', 'ul'], ['3-2', 'u', 'r'],
     ['2-2', 'd', 'r'], ['2-4', 'd', 'l'], ['3-4', 'u', 'l'], ['3-3', 'u', 'd'], ['3-3', 'l', 'r'],
@@ -44,6 +45,7 @@ function startNewGame () {
     sectors = {}
     shapeSectors = {}
     draggedSector = null
+    isDragOK = false
 
     clearField()
     drawField()
@@ -67,33 +69,69 @@ function redrawShape(shapeField) {
 }
 
 function clearShape(shapeField) {
-    shapesNodes[shapeField].innerHTML = ''
-    shapesNodes[shapeField].shapeType = ''
+    let currentShapeNode = shapesNodes[shapeField]
+    currentShapeNode.innerHTML = ''
+    currentShapeNode.shapeType = ''
+    currentShapeNode.isShapePossible = false
     // Some other actions?
 }
 
 function drawShape(shapeField) {
+    let currentShapeNode = shapesNodes[shapeField]
     shapeSectors[shapeField] = {}
 
     //ToDo: make a better random.
-    let shapeType = Math.round(Math.random()*38)
-    let currentShape = allShapes[shapeType]
-    shapesNodes[shapeField].shapeType = shapeType
+    let currentShapeType = Math.round(Math.random()*38)
+    let currentShape = currentShapeNode.currentShape = allShapes[currentShapeType]
+    currentShapeNode.shapeType = currentShapeType
+    currentShapeNode.isShapePossible = false
 
     for (let i = 1; i < 6; i++) for (let j = 1; j < 6; j++) createNewSector(i, j, shapeField)
 
-    let initialSector = shapeSectors[shapeField][`${shapeField}_${currentShape[0]}`]
-    initialSector.makeFilled()
-
-    if (shapeType = 0) return //Initial sector is already marked.
-    //Run all given directions around the initial sector. 
-    for (let i = 1; i < currentShape.length; i++) {
-        let currentDirection = currentShape[i]
-        let targetID = initialSector.sectorsAround[currentDirection]
-        let target = shapeSectors[shapeField][targetID]
-
-        target.makeFilled()
+    currentShapeNode.checkSector = function (sector) {
+        if (sector.state) return false
+        let currentShape = currentShapeNode.currentShape
+        for (let i = 1; i < currentShape.length; i++) {
+            let currentID = sector.sectorsAround[currentShape[i]]
+            if (!currentID) {
+                return
+            }
+            let currentSector = sectors[currentID]
+            if (currentSector.state) {
+                return
+            }
+        }
+        currentShapeNode.isShapePossible = true
     }
+
+    currentShapeNode.checkShapePossibility = function () {
+        for (let sector in sectors) {
+            currentShapeNode.checkSector(sectors[sector])
+            if (currentShapeNode.isShapePossible) break
+        }
+        currentShapeNode.markShape()
+    }
+
+    currentShapeNode.markShape = function () {
+        let initialSector = shapeSectors[shapeField][`${shapeField}_${currentShape[0]}`]
+        if (!currentShapeNode.isShapePossible) initialSector.makeShapeImpossible()
+        if (currentShapeNode.isShapePossible) initialSector.makeShapePossible()
+    
+        if (currentShapeType = 0) return //Initial sector is already marked.
+        //Run all given directions around the initial sector. 
+        for (let i = 1; i < currentShape.length; i++) {
+            let currentDirection = currentShape[i]
+            let targetID = initialSector.sectorsAround[currentDirection]
+            let target = shapeSectors[shapeField][targetID]
+    
+            if (!currentShapeNode.isShapePossible) target.makeShapeImpossible()
+            if (currentShapeNode.isShapePossible) target.makeShapePossible()
+        }
+        currentShapeNode.isShapePossible = false
+    }
+
+    currentShapeNode.checkShapePossibility()
+
 }
 
 /**
@@ -138,12 +176,21 @@ function createNewSector(x, y, shapeField) {
             if (currentShape[i] == 'u2') newSector.iconY = 95
         }
     }
-
-    newSector.addEventListener('click', (e) => {
-        e.target.handleClick()
-    })
     newSector.makeFilled = function () {
+        this.classList.add('sector_filled')
+        this.state = 1
+    }
+    newSector.makeShapePossible = function () {
+        this.classList.add('shape-sector_possible')
+        this.state = 1
+    }
+    newSector.makeShapeImpossible = function () {
+        this.classList.add('shape-sector_impossible')
+        this.state = 1
+    }
+    newSector.makeShapeOK = function () {
         this.classList.add('shape-sector_filled')
+        this.state = 1
     }
     newSector.makeDragGood = function () {
         this.classList.add('sector_drag-good')
@@ -168,33 +215,49 @@ function createNewSector(x, y, shapeField) {
     }
     newSector.handleDragEnd = function () {
         draggedSector = null
-        let sectors = shapesNodes[this.shapeField].childNodes
-        for (let i = 0; i < sectors.length; i++) {
-            let sector = sectors[i]
-            if (sector.classList.contains('shape-sector_dragged')) sector.classList.remove('shape-sector_dragged')
+        isDragOK = false
+        let shapeSectors = shapesNodes[this.shapeField].childNodes
+        for (let i = 0; i < shapeSectors.length; i++) {
+            let sector = shapeSectors[i]
+            sector.classList.remove('shape-sector_dragged')
+        }
+        let fieldSectors = fieldNode.childNodes
+        for (let i = 0; i < fieldSectors.length; i++) {
+            let sector = fieldSectors[i]
+            sector.classList.remove('sector_drag-good')
+            sector.classList.remove('sector_drag-bad')
         }
     }
     newSector.handleDragOver = function () {
-        let isDragOK = true
+        isDragOK = true
+
         this.makeDragGood()
+        if (this.state) {
+            isDragOK = false
+        }
+
         currentShape = draggedSector.shapeType
-        for (let i = 1; i < allShapes[currentShape].length; i++) {
+        if (isDragOK) for (let i = 1; i < allShapes[currentShape].length; i++) {
             let currentID = this.sectorsAround[allShapes[currentShape][i]]
             if (!currentID) {
                 isDragOK = false
                 break
             }
             let currentSector = sectors[currentID]
+            if (currentSector.state) {
+                isDragOK = false
+                break
+            }
             currentSector.makeDragGood()
         }
-        //ToDo: Place for checking for filled sectors.
+        
         if (isDragOK) return
-        this.makeDragBad()
+        if (!this.state) this.makeDragBad()
         for (let i = 1; i < allShapes[currentShape].length; i++) {
             let currentID = this.sectorsAround[allShapes[currentShape][i]]
             if (!currentID) continue
             let currentSector = sectors[currentID]
-            currentSector.makeDragBad()
+            if (!currentSector.state) currentSector.makeDragBad()
         }
     }
     newSector.handleDragLeave = function () {
@@ -208,10 +271,29 @@ function createNewSector(x, y, shapeField) {
         }
     }
     newSector.handleDrop = function () {
-        console.log(`Dropped to ${this.id}.`)
+        if (!isDragOK) return
+        this.makeFilled()
+        currentShape = draggedSector.shapeType
+        for (let i = 1; i < allShapes[currentShape].length; i++) {
+            let currentID = this.sectorsAround[allShapes[currentShape][i]]
+            if (!currentID) continue
+            let currentSector = sectors[currentID]
+            currentSector.makeFilled()
+        }
+        let shapeField = draggedSector.shapeField
+        draggedSector = null
+        isDragOK = false
+        redrawShape(shapeField)
+        for (let i = 1; i < 4; i++) shapesNodes[i].checkShapePossibility()
+
+        //ToDo: End game if all shapes are impossible.
     }
 
 
+
+    newSector.addEventListener('click', (e) => {
+        e.target.handleClick()
+    })
     if (shapeField) newSector.addEventListener('dragstart', (e) => {
         let sector = e.target
         e.dataTransfer.setDragImage(sector.icon, sector.iconX, sector.iconY);
@@ -221,6 +303,7 @@ function createNewSector(x, y, shapeField) {
         e.target.handleDragEnd()
     })
     if (!shapeField) newSector.addEventListener('dragover', (e) => {
+        e.preventDefault()
         e.target.handleDragOver()
     })
     if (!shapeField) newSector.addEventListener('dragleave', (e) => {

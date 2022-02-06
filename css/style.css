@@ -130,9 +130,12 @@ body {
     border-bottom: 1px solid #fff;
 }
 
-.shape-sector_filled {
+.shape-sector_possible {
     background: #0173c7;
     cursor: pointer;
+}
+.shape-sector_impossible {
+    background: #0173c766;
 }
 
 .shape-sector_dragged {
